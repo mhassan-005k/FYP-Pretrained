@@ -1,0 +1,18 @@
+{
+  "id": "muhammadhassan2/srs-v1-2-satellite-super-resolution",
+  "title": "SRS v1-2 Satellite Super Resolution",
+  "code_file": "srs_v1_2_benchmark.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "amerii/spacenet-7-multitemporal-urban-development",
+    "jucor1/worldstrat"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

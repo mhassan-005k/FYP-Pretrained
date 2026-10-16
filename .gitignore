@@ -1,0 +1,36 @@
+# Credentials & Secrets
+kaggle.json
+.env
+*.pem
+*.key
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Jupyter & Checkpoints
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# Geospatial Data & Large Files
+*.tif
+*.tiff
+*.pth
+*.pt
+*.safetensors
+*.tar.gz
+*.zip
+*.npz
+
+# Outputs & Temporary files
+output/
+runs/
+logs/
+scratch/
+.cache/

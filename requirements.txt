@@ -1,0 +1,20 @@
+# Core Machine Learning & Vision
+torch>=2.0.0
+torchvision>=0.15.0
+timm>=0.9.0
+einops>=0.6.0
+
+# Geospatial & Raster Processing (SRS FR-1, FR-2, FR-10)
+rasterio>=1.3.0
+affine>=2.4.0
+
+# Quantitative Metrics & Image Processing (SRS Section 6.1)
+scikit-image>=0.21.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Visualization & Reporting (SRS FR-8)
+matplotlib>=3.7.0
+
+# Kaggle Ecosystem Integration
+kaggle>=2.0.0
