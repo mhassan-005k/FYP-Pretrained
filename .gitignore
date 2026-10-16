@@ -24,6 +24,8 @@ venv/
 *.pth
 *.pt
 *.safetensors
+*.safetensor
+weights/
 *.tar.gz
 *.zip
 *.npz
