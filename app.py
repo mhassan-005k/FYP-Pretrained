@@ -63,30 +63,60 @@ st.markdown("""
     .main-header {
         font-size: 2.2rem;
         font-weight: 800;
-        color: #0E3A5D;
-        margin-bottom: 0px;
+        color: #0284C7;
+        margin-bottom: 4px;
     }
     .sub-header {
         font-size: 1.05rem;
-        color: #4A5568;
+        color: #94A3B8;
         margin-top: 0px;
-        margin-bottom: 15px;
+        margin-bottom: 18px;
     }
     .badge-srs {
-        background-color: #E2E8F0;
-        color: #1A365D;
+        background: linear-gradient(135deg, #0284C7, #0369A1);
+        color: #FFFFFF !important;
         padding: 4px 10px;
         border-radius: 12px;
         font-size: 0.85rem;
-        font-weight: 600;
+        font-weight: 700;
+    }
+    .pipeline-box {
+        background-color: #0F172A;
+        color: #F8FAFC !important;
+        border: 1px solid #334155;
+        border-left: 5px solid #38BDF8;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 0.88rem;
+        line-height: 1.6;
+        margin-bottom: 14px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .pipeline-box b {
+        color: #60A5FA !important;
     }
     .metadata-box {
-        background-color: #F1F5F9;
-        border-left: 4px solid #0284C7;
-        padding: 12px;
+        background-color: #0F172A;
+        color: #F8FAFC !important;
+        border: 1px solid #334155;
+        border-left: 5px solid #0EA5E9;
+        padding: 14px 16px;
+        border-radius: 8px;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 0.92rem;
+        line-height: 1.65;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .metadata-box b {
+        color: #93C5FD !important;
+    }
+    .branch-highlight {
+        color: #38BDF8 !important;
+        font-weight: 800;
+        background-color: rgba(14, 165, 233, 0.2);
+        padding: 2px 8px;
         border-radius: 4px;
-        font-family: monospace;
-        font-size: 0.9rem;
+        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -333,12 +363,12 @@ with st.sidebar:
     # Automated Pipeline Badge (No confusing model dropdown!)
     st.markdown("#### **⚙️ Automated Pipeline Engine**")
     st.markdown("""
-    <div style="background-color:#EBF8FF; border-left: 4px solid #3182CE; padding: 10px; border-radius: 4px; font-size: 0.85rem; margin-bottom: 12px;">
-    <b>SRS v1.2 Auto-Pipeline:</b> Active<br>
+    <div class="pipeline-box">
+    <b>SRS v1.2 Auto-Pipeline:</b> <span style="color:#4ADE80; font-weight:bold;">Active</span><br>
     The system automatically selects the optimal branch based on observation resolution:<br>
-    • <b>0.5m:</b> Branch 1 (TTST VHR)<br>
-    • <b>1.0m:</b> Branch 2 (Transformer + MTF)<br>
-    • <b>2.5m:</b> Branch 3 (SEN2SR Mamba Cascade)
+    • <b style="color:#93C5FD;">0.5m:</b> Branch 1 (TTST VHR)<br>
+    • <b style="color:#93C5FD;">1.0m:</b> Branch 2 (Transformer + MTF)<br>
+    • <b style="color:#93C5FD;">2.5m:</b> Branch 3 (SEN2SR Mamba Cascade)
     </div>
     """, unsafe_allow_html=True)
 
@@ -456,8 +486,8 @@ with tabs[0]:
             <b>Spatial CRS:</b> {meta['crs']}<br>
             <b>Observed GSD:</b> {meta['native_gsd_str']}<br>
             <b>Bands & Bit Depth:</b> {meta['bands']} Bands ({meta['dtype']})<br>
-            <b>Auto Pipeline Branch:</b> <span style="color:#0284C7; font-weight:bold;">{branch_label}</span><br>
-            <b>Target Product:</b> 0.30 m GSD (EPSG:32642 Preserved)
+            <b>Auto Pipeline Branch:</b> <span class="branch-highlight">{branch_label}</span><br>
+            <b>Target Product:</b> <span style="color:#4ADE80; font-weight:bold;">0.30 m GSD</span> (EPSG:32642 Preserved)
             </div>
             """, unsafe_allow_html=True)
 
