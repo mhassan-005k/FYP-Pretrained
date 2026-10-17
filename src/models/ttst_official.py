@@ -2,10 +2,27 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
-from thop import profile
+try:
+    from thop import profile
+except ImportError:
+    def profile(model, inputs=None, **kwargs):
+        return 0, 0
 
-from basicsr.utils.registry import ARCH_REGISTRY
-from basicsr.archs.arch_util import to_2tuple, trunc_normal_
+try:
+    from basicsr.utils.registry import ARCH_REGISTRY
+except ImportError:
+    class DummyRegistry:
+        def register(self):
+            return lambda cls: cls
+    ARCH_REGISTRY = DummyRegistry()
+
+try:
+    from basicsr.archs.arch_util import to_2tuple, trunc_normal_
+except ImportError:
+    def to_2tuple(x):
+        return (x, x) if not isinstance(x, (tuple, list)) else tuple(x)
+    trunc_normal_ = torch.nn.init.trunc_normal_
+
 import numbers
 
 from einops import rearrange
