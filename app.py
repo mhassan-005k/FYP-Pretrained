@@ -325,19 +325,8 @@ with st.sidebar:
     # Hardware Status
     if DEVICE.type == 'cuda':
         st.success(f"⚡ **GPU Accelerated:** {torch.cuda.get_device_name(0)}")
-        cpu_profile = "⚡ GPU Accelerated"
     else:
         st.info("💻 **Hardware:** Local CPU (Multi-threaded)")
-        st.markdown("#### **🚀 CPU Execution Profile**")
-        cpu_profile = st.radio(
-            "Engine Mode",
-            [
-                "⚡ Fast Turbo Mode (Physics CNN + MTF) [10-25s]",
-                "🔬 Deep Vision Transformer (TTST) [Tiled]"
-            ],
-            index=0,
-            help="Fast Turbo Mode runs seamless 128x128 tiled inference with physics constraints in seconds. Deep Transformer uses all 36 Swin layers."
-        )
 
     st.markdown("---")
     
@@ -517,26 +506,22 @@ with tabs[0]:
             elif branch_id == 2:
                 # Branch 2: High-Res Sensor Refinement (1.0m -> 0.3m via Transformer + MTF Boost)
                 progress_bar.progress(25, text="Executing Branch 2: High-Res Sensor Refinement (Transformer + MTF)...")
-                if DEVICE.type == 'cpu' and cpu_profile.startswith("⚡ Fast Turbo Mode"):
-                    sen2sr_net = load_sen2sr_model()
-                    sr_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
+                ttst_net = load_ttst_model()
+                if DEVICE.type == 'cuda':
+                    pad_w = (8 - W_in % 8) % 8
+                    pad_h = (8 - H_in % 8) % 8
+                    lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                    with torch.no_grad():
+                        sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
                 else:
-                    ttst_net = load_ttst_model()
-                    if DEVICE.type == 'cuda':
+                    if W_in <= 128 and H_in <= 128:
                         pad_w = (8 - W_in % 8) % 8
                         pad_h = (8 - H_in % 8) % 8
                         lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
                         with torch.no_grad():
                             sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
                     else:
-                        if W_in <= 128 and H_in <= 128:
-                            pad_w = (8 - W_in % 8) % 8
-                            pad_h = (8 - H_in % 8) % 8
-                            lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
-                            with torch.no_grad():
-                                sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
-                        else:
-                            sr_raw = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+                        sr_raw = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
 
             elif branch_id == 3:
                 # Branch 3: Multi-Scale Progressive Cascade (2.5m -> 0.3m via ESA SEN2SR Physics Constraint)
