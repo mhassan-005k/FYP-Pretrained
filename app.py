@@ -493,38 +493,56 @@ with tabs[0]:
                 pct = int(25 + 55 * (cur / total))
                 progress_bar.progress(pct, text=f"Processing Tile {cur} of {total} ({int(100*cur/total)}%)...")
 
-            # Route execution based on hardware and profile
-            if DEVICE.type == 'cpu' and cpu_profile.startswith("⚡ Fast Turbo Mode"):
-                progress_bar.progress(25, text="Loading Physics-Guided CNNSR Model...")
-                sen2sr_net = load_sen2sr_model()
-                sr_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
-            elif branch_id == 3:
-                # Branch 3: SEN2SR Mamba Cascade
-                progress_bar.progress(25, text="Executing Branch 3: Multi-Scale SEN2SR Cascade...")
-                sen2sr_net = load_sen2sr_model()
-                sr_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
-            else:
-                # Transformer execution
+            # Route execution explicitly based on SRS v1.2 Pipeline Branch
+            if branch_id == 1:
+                # Branch 1: VHR Refinement (0.5m -> 0.3m via TTST Transformer)
+                progress_bar.progress(25, text="Executing Branch 1: VHR Refinement (TTST Swin Transformer)...")
                 ttst_net = load_ttst_model()
                 if DEVICE.type == 'cuda':
-                    progress_bar.progress(40, text="Executing Vision Transformer on GPU...")
                     pad_w = (8 - W_in % 8) % 8
                     pad_h = (8 - H_in % 8) % 8
                     lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
                     with torch.no_grad():
                         sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
                 else:
-                    # CPU Tiled Transformer
                     if W_in <= 128 and H_in <= 128:
-                        progress_bar.progress(40, text="Executing Deep Transformer on CPU...")
                         pad_w = (8 - W_in % 8) % 8
                         pad_h = (8 - H_in % 8) % 8
                         lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
                         with torch.no_grad():
                             sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
                     else:
-                        progress_bar.progress(25, text="Running Tiled Transformer Inference on CPU...")
                         sr_raw = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+
+            elif branch_id == 2:
+                # Branch 2: High-Res Sensor Refinement (1.0m -> 0.3m via Transformer + MTF Boost)
+                progress_bar.progress(25, text="Executing Branch 2: High-Res Sensor Refinement (Transformer + MTF)...")
+                if DEVICE.type == 'cpu' and cpu_profile.startswith("⚡ Fast Turbo Mode"):
+                    sen2sr_net = load_sen2sr_model()
+                    sr_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
+                else:
+                    ttst_net = load_ttst_model()
+                    if DEVICE.type == 'cuda':
+                        pad_w = (8 - W_in % 8) % 8
+                        pad_h = (8 - H_in % 8) % 8
+                        lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                        with torch.no_grad():
+                            sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
+                    else:
+                        if W_in <= 128 and H_in <= 128:
+                            pad_w = (8 - W_in % 8) % 8
+                            pad_h = (8 - H_in % 8) % 8
+                            lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                            with torch.no_grad():
+                                sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
+                        else:
+                            sr_raw = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+
+            elif branch_id == 3:
+                # Branch 3: Multi-Scale Progressive Cascade (2.5m -> 0.3m via ESA SEN2SR Physics Constraint)
+                progress_bar.progress(25, text="Executing Branch 3: Multi-Scale SEN2SR Cascade (Physics-Constrained)...")
+                sen2sr_net = load_sen2sr_model()
+                sr_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
             
             # Apply MTF High-Frequency Sharpening to eliminate blur
             progress_bar.progress(85, text="Applying MTF High-Frequency Edge Sharpening (RA-4)...")
