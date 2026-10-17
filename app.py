@@ -385,12 +385,12 @@ with st.sidebar:
     )
 
     # Blur Reduction / MTF Sharpening
-    st.markdown("#### 🔍 **Blur Reduction Controls**")
+    st.markdown("#### 🔍 **Branch 2 Blur Reduction Controls**")
     sharpening_mode = st.select_slider(
-        "MTF High-Frequency Boost",
+        "Branch 2 MTF High-Frequency Boost",
         options=["Off", "Mild (0.5x)", "Standard (1.0x)", "Crisp (1.5x - Recommended)", "Ultra (2.0x)"],
         value="Crisp (1.5x - Recommended)",
-        help="Compensates for sensor blur and eliminates conservative L1 smoothing."
+        help="Specifically applied in Branch 2 (1.0m SPOT / PlanetScope) to compensate for sensor blur without false hallucination."
     )
     alpha_map = {"Off": 0.0, "Mild (0.5x)": 0.5, "Standard (1.0x)": 1.0, "Crisp (1.5x - Recommended)": 1.5, "Ultra (2.0x)": 2.0}
     chosen_alpha = alpha_map[sharpening_mode]
@@ -514,58 +514,95 @@ with tabs[0]:
 
             # Route execution explicitly based on SRS v1.2 Pipeline Branch
             if branch_id == 1:
-                # Branch 1: VHR Refinement (0.5m -> 0.3m via TTST Transformer)
-                progress_bar.progress(25, text="Executing Branch 1: VHR Refinement (TTST Swin Transformer)...")
+                # -------------------------------------------------------------
+                # Branch 1: VHR Sub-Pixel Refinement (0.5m -> 0.3m)
+                # Method: Direct TTST Token-Attention Residual Refinement
+                # Strict Optical Fidelity (NO artificial MTF sharpening applied)
+                # -------------------------------------------------------------
+                progress_bar.progress(25, text="Executing Branch 1: VHR Sub-Pixel Refinement (TTST Token-Attention)...")
                 ttst_net = load_ttst_model()
-                if DEVICE.type == 'cuda':
-                    pad_w = (8 - W_in % 8) % 8
-                    pad_h = (8 - H_in % 8) % 8
-                    lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                pad_w = (8 - W_in % 8) % 8
+                pad_h = (8 - H_in % 8) % 8
+                lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                if DEVICE.type == 'cuda' or (W_in <= 160 and H_in <= 160):
                     with torch.no_grad():
-                        sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
+                        raw_sr_b1 = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
                 else:
-                    if W_in <= 128 and H_in <= 128:
-                        pad_w = (8 - W_in % 8) % 8
-                        pad_h = (8 - H_in % 8) % 8
-                        lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
-                        with torch.no_grad():
-                            sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
-                    else:
-                        sr_raw = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+                    raw_sr_b1 = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+                
+                # Sub-pixel high-frequency residual injection onto target 0.3m grid
+                res_raw = raw_sr_b1 - F.interpolate(tensor_lr.to(DEVICE), size=(H_in*4, W_in*4), mode='bicubic', align_corners=False)
+                res_target = F.interpolate(res_raw, size=(H_out, W_out), mode='bicubic', align_corners=False)
+                sr_final = torch.clamp(bicubic_t + res_target, 0.0, 1.0)
+                caption_sr = f"{branch_label} [Native Optical Fidelity]"
 
             elif branch_id == 2:
-                # Branch 2: High-Res Sensor Refinement (1.0m -> 0.3m via Transformer + MTF Boost)
-                progress_bar.progress(25, text="Executing Branch 2: High-Res Sensor Refinement (Transformer + MTF)...")
+                # -------------------------------------------------------------
+                # Branch 2: High-Res Sensor Refinement (1.0m -> 0.3m)
+                # Method: Transformer Backbone + MTF High-Frequency Edge Boost
+                # Specifically compensates for SPOT/PlanetScope sensor blur
+                # -------------------------------------------------------------
+                progress_bar.progress(25, text="Executing Branch 2: High-Res Sensor Refinement (Transformer Backbone)...")
                 ttst_net = load_ttst_model()
-                if DEVICE.type == 'cuda':
-                    pad_w = (8 - W_in % 8) % 8
-                    pad_h = (8 - H_in % 8) % 8
-                    lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                pad_w = (8 - W_in % 8) % 8
+                pad_h = (8 - H_in % 8) % 8
+                lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
+                if DEVICE.type == 'cuda' or (W_in <= 160 and H_in <= 160):
                     with torch.no_grad():
-                        sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
+                        sr_raw_b2 = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
                 else:
-                    if W_in <= 128 and H_in <= 128:
-                        pad_w = (8 - W_in % 8) % 8
-                        pad_h = (8 - H_in % 8) % 8
-                        lr_padded = F.pad(tensor_lr.to(DEVICE), (0, pad_w, 0, pad_h), mode='reflect')
-                        with torch.no_grad():
-                            sr_raw = ttst_net(lr_padded)[:, :, :H_in*4, :W_in*4]
-                    else:
-                        sr_raw = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+                    sr_raw_b2 = run_tiled_inference(ttst_net, tensor_lr.to(DEVICE), tile_size=64, overlap=8, scale=4, progress_cb=update_tile_progress, is_sen2sr=False)
+                
+                # Apply MTF High-Frequency Sharpening specifically inside Branch 2
+                progress_bar.progress(80, text=f"Applying MTF High-Frequency Edge Sharpening ({chosen_alpha:.1f}x Boost)...")
+                sr_sharp_b2 = apply_mtf_sharpening(sr_raw_b2, alpha=chosen_alpha)
+                sr_final = F.interpolate(sr_sharp_b2, size=(H_out, W_out), mode='bicubic', align_corners=False).clamp(0.0, 1.0)
+                caption_sr = f"{branch_label} [MTF {chosen_alpha:.1f}x Edge Boost]"
 
             elif branch_id == 3:
-                # Branch 3: Multi-Scale Progressive Cascade (2.5m -> 0.3m via ESA SEN2SR Physics Constraint)
-                progress_bar.progress(25, text="Executing Branch 3: Multi-Scale SEN2SR Cascade (Physics-Constrained)...")
+                # -------------------------------------------------------------
+                # Branch 3: Multi-Scale Progressive Cascade (2.5m -> 0.3m)
+                # Stage 1: ESA SEN2SR (Fourier HardConstraint) + Mamba 2D Spatial SSM
+                # Stage 2: TTST VHR Structural Refinement (Token Attention)
+                # Strict Zero Hallucination (RA-3) - NO artificial MTF distortion
+                # -------------------------------------------------------------
+                progress_bar.progress(20, text="Executing Branch 3: Multi-Scale Cascade [Stage 1: ESA SEN2SR + Mamba SSM]...")
                 sen2sr_net = load_sen2sr_model()
-                sr_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
-            
-            # Apply MTF High-Frequency Sharpening to eliminate blur
-            progress_bar.progress(85, text="Applying MTF High-Frequency Edge Sharpening (RA-4)...")
-            sr_sharp = apply_mtf_sharpening(sr_raw, alpha=chosen_alpha)
-            
-            sr_final = F.interpolate(sr_sharp, size=(H_out, W_out), mode='bicubic', align_corners=False).clamp(0.0, 1.0)
+                from src.models.mamba_ssm import MambaSpatialSSM
+                mamba_layer = MambaSpatialSSM(in_channels=3).to(DEVICE)
+                
+                # Stage 1: Physics-Constrained Macro Enhancement
+                sr_s1_raw = run_tiled_inference(sen2sr_net, tensor_lr.to(DEVICE), tile_size=128, overlap=16, scale=4, progress_cb=update_tile_progress, is_sen2sr=True)
+                
+                # Mamba 2D Spatial State-Space sequence modeling
+                progress_bar.progress(55, text="Executing Branch 3: Multi-Scale Cascade [Mamba 2D Spatial State-Space Sequence Scan]...")
+                with torch.no_grad():
+                    sr_s1_mamba = mamba_layer(sr_s1_raw).clamp(0.0, 1.0)
+                
+                # Stage 2: TTST VHR Structural Refinement
+                progress_bar.progress(70, text="Executing Branch 3: Multi-Scale Cascade [Stage 2: TTST VHR Structural Refinement]...")
+                ttst_net = load_ttst_model()
+                
+                # Resample intermediate features to 1.0m intermediate grid
+                inter_h = max(32, int(round(H_in * 2.5)))
+                inter_w = max(32, int(round(W_in * 2.5)))
+                s1_inter = F.interpolate(sr_s1_mamba, size=(inter_h, inter_w), mode='bicubic', align_corners=False)
+                
+                if DEVICE.type == 'cuda' or (inter_w <= 128 and inter_h <= 128):
+                    pad_w2 = (8 - inter_w % 8) % 8
+                    pad_h2 = (8 - inter_h % 8) % 8
+                    s1_padded = F.pad(s1_inter, (0, pad_w2, 0, pad_h2), mode='reflect')
+                    with torch.no_grad():
+                        sr_s2_raw = ttst_net(s1_padded)[:, :, :inter_h*4, :inter_w*4]
+                else:
+                    sr_s2_raw = run_tiled_inference(ttst_net, s1_inter, tile_size=64, overlap=8, scale=4, is_sen2sr=False)
+                
+                # Final grid calibration to target 0.30m GSD
+                sr_final = F.interpolate(sr_s2_raw, size=(H_out, W_out), mode='bicubic', align_corners=False).clamp(0.0, 1.0)
+                caption_sr = f"{branch_label} [SEN2SR + Mamba SSM -> TTST Cascade]"
+
             inference_time = time.time() - t0
-            progress_bar.progress(100, text="Complete!")
+            progress_bar.progress(100, text=f"Super-Resolution Complete in {inference_time:.1f}s!")
             time.sleep(0.3)
             progress_bar.empty()
 
@@ -590,7 +627,7 @@ with tabs[0]:
             with c3:
                 st.markdown(f"**3. Super-Resolved 0.3m GSD ({W_out}x{H_out})**")
                 st.image(to_pil(sr_final), use_column_width=True)
-                st.caption(f"{branch_label} + MTF ({chosen_alpha:.1f}x Boost)")
+                st.caption(caption_sr)
 
             # Difference Heatmap
             st.markdown("#### **🔥 Recovered High-Frequency Structural Detail Map**")
@@ -641,7 +678,7 @@ with tabs[0]:
                 "input_gsd": meta["native_gsd_str"],
                 "output_gsd": "0.30m GSD",
                 "latency": f"{inference_time:.2f}s",
-                "sharpening": sharpening_mode,
+                "sharpening": sharpening_mode if branch_id == 2 else "Off (Native / Physics Guided)",
                 "crs": meta["crs"],
                 "out_path": out_geotiff_path,
                 "thumb_path": thumb_path
